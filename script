@@ -2,7 +2,7 @@
 Author: Nicole Wang
 Date: April 2022
 
-This script implements  the Metropolis algorithm to sample from a posterior distribution on a psychological parameter.
+This script implements the Metropolis algorithm to sample from a posterior distribution on a psychological parameter.
 """
 
 # Importing necessary libraries for data manipulation, math functions, statistical distribution, and plotting
