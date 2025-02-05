@@ -1,0 +1,136 @@
+"""
+Author: Nicole Wang
+Date: April 2022
+
+This script implements  the Metropolis algorithm to sample from a posterior distribution on a psychological parameter.
+"""
+
+# Importing necessary libraries for data manipulation, math functions, statistical distribution, and plotting
+import numpy as np
+from math import exp, log, sqrt
+import scipy.stats
+import csv
+import pandas as pd
+import matplotlib.pyplot as plt
+import random
+from matplotlib.patches import Rectangle
+
+# Define column names for easy access to the dataset
+col_list = ['a', 'n1', 'n2']
+
+# Load the dataset using pandas, focusing only on the necessary columns 'a', 'n1', and 'n2'
+df = pd.read_csv("Assignment9-data.csv", usecols=col_list)
+
+# Extract behavioral data from the dataset
+# Create an empty array for each column (accuracy, n1, n2)
+a = np.empty(0)
+for i in range(len(df['a'])):
+    a = np.append(a, df['a'][i])
+
+n1 = np.empty(0)
+for i in range(len(df['n1'])):
+    n1 = np.append(n1, df['n1'][i])
+
+n2 = np.empty(0)
+for i in range(len(df['n2'])):
+    n2 = np.append(n2, df['n2'][i])
+
+# Define the log of the prior distribution for W (the cognitive parameter we are inferring)
+def log_prior(W):
+    # Prior is an exponential decay based on W
+    if W <= 0:
+        return -np.inf  # If W is less than or equal to 0, return -infinity as its probability is 0
+    else:
+        return log(exp(-W))  # Otherwise, return log of the exponential prior (this is just -W)
+
+# Define the log-likelihood function based on the psychophysical model
+def log_likelihood(n1, n2, a, W):
+    # Computes the log of the likelihood for the given accuracy data and stimuli
+    assert(len(n1) == len(n2) == len(a))  # Ensure the arrays are of the same length
+    
+    # Calculate the probability of answering correctly based on the model
+    p = 1.0 - scipy.stats.norm.cdf(0, loc=np.abs(n1-n2), scale=W*np.sqrt(n1**2 + n2**2))
+    
+    # Return the sum of log probabilities for each response (correct or incorrect)
+    return np.sum(np.where(a, np.log(p), np.log(1.0 - p)))
+
+# Define the log of the posterior distribution as the sum of the log prior and log likelihood
+def log_posterior(n1, n2, a, W):
+    return log_prior(W) + log_likelihood(n1, n2, a, W)  # Combine prior and likelihood in log space
+
+# Initialize the sampling with a random W value
+W = 0.6
+
+# Prepare lists to store posterior scores and samples
+samples = []
+post_scores = []
+
+# Run the Metropolis algorithm for the first 300 samples
+for _ in range(300):
+    W_ = W + np.random.normal(0, 0.1)  # Propose a new value for W by adding random noise from a normal distribution
+    # Accept the new W if it improves the posterior or with a certain probability based on the Metropolis criterion
+    if log_posterior(n1, n2, a, W_) > log_posterior(n1, n2, a, W) or np.random.uniform() < (log_posterior(n1, n2, a, W_) - log_posterior(n1, n2, a, W)):
+        W = W_  # Accept the new W if the condition holds
+    post_scores.append(log_posterior(n1, n2, a, W))  # Store the posterior score
+    samples.append(W)  # Store the current value of W
+
+# Plot the posterior scores over the first 300 samples to visualize the algorithm's convergence
+plt.plot(range(300), post_scores)
+plt.xlabel('range 0-300')
+plt.ylabel('posterior scores')
+plt.title('posterior scores of first 300 samples')
+
+# Plot the value of W over the first 300 samples
+plt.plot(range(300), samples)
+plt.xlabel('range 0-300')
+plt.ylabel('Ws')
+plt.title('value of W over first 300 samples')
+
+# Initialize a list for the final set of samples
+samples = []
+
+# Run the Metropolis algorithm for 10,000 total samples, with a burn-in phase of 1,000 samples
+for _ in range(10000):
+    W_ = W + np.random.normal(0, 0.1)  # Propose a new W with some random noise
+    ratio = exp(log_posterior(n1, n2, a, W_) - log_posterior(n1, n2, a, W))  # Calculate the acceptance ratio
+    # Accept the new W based on the Metropolis criterion
+    if ratio > 1 or np.random.uniform() < ratio:
+        W = W_
+    samples.append(W)  # Store the new value of W
+
+# Discard the first 1,000 samples as "burn-in"
+samples = samples[1000:10000]
+
+# Plot the histogram of W values after the burn-in phase
+plt.hist(samples, bins=100)
+plt.xlabel('Ws')
+plt.title('value of W over 10000 samples after 1000 samples burn in')
+
+# Determine the probability that W falls within the range [0.60, 0.65]
+inside_interval = []
+for sample in samples:
+    if sample >= 0.6 and sample <= 0.65:
+        inside_interval.append(sample)
+
+# Print the probability that W is in the specified range
+print('the probability that W is in the interval [0.60, 0.65] is', len(inside_interval) / len(samples))
+
+# Now, we run the sampler on just the prior distribution (no data)
+W = 0.6
+samples_prior = []  # Store the prior samples
+
+# Run the Metropolis algorithm on the prior for 10,000 samples
+for _ in range(10000):
+    W_ = W + np.random.normal(0, 0.1)
+    ratio = exp(log_prior(W_) - log_prior(W))  # Use only the prior in the acceptance ratio
+    if ratio > 1 or np.random.uniform() < ratio:
+        W = W_
+    samples_prior.append(W)
+
+# Plot histograms for both prior and posterior samples on the same graph
+plt.hist(samples)
+plt.hist(samples_prior)
+colors = ["blue", "orange"]
+handles = [Rectangle((0, 0), 1, 1, color=c, ec="k") for c in colors]
+labels = ["post samples", "prior samples"]
+plt.legend(handles, labels)  # Add a legend to differentiate the two distributions
